@@ -11,7 +11,7 @@ Your system must have "curl" and "sendmail" commands available.
 
 *Usage*
 
-First time you execute the scipt it will initilize the cursor to current dropbox status.
+First time you execute the script it will initilize the cursor to current dropbox status.
 
 After that, each time you execue the script it will fetch changes from previous running, sort them and send them to email address specified in header.
 
