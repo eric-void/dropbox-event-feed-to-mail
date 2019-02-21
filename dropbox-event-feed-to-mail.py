@@ -24,9 +24,9 @@ import subprocess
 import os
 import json
 import quopri
+import time
 
 currdir = os.path.realpath(os.path.dirname(__file__))
-
 
 def send_mail(subject, body):
   try:
@@ -91,6 +91,10 @@ def updates_fetch(cursor):
       output = json.loads(output)
       if 'cursor' in output and 'entries' in output:
         return output
+      elif 'error' in output and 'retry_after' in output['error']:
+        logging.debug('sleep requested... ' + str(output))
+        time.sleep(output['error']['retry_after'])
+        return {'entries': [], 'cursor': cursor, 'has_more': True};
       else:
         logging.error("failed decoding updates json from Dropbox: " + str(output))
     except:
@@ -103,36 +107,43 @@ def updates_fetch(cursor):
 def main():
   cursor = cursor_fetch()
   if cursor:
-    data = updates_fetch(cursor)
-    if data:
-      print("Got data for " + str(len(data['entries'])) + " entries ...")
-      if data['entries']:
-        entries = {}
+    entries = {}
+    cont = True
+    while cont:
+      data = updates_fetch(cursor)
+      cont = False
+      if data and 'entries' in data:
+        print("Got data for " + str(len(data['entries'])) + " entries ...")
         for e in data['entries']:
           entries[e['path_lower']] = e
           entries[e['path_lower']]['count'] = 0
+        if data['has_more'] and data['entries']:
+          cursor = data['cursor']
+          time.sleep(5)
+          cont = True
 
-        prev = False
-        for path in sorted(entries):
-          #if prev and (entries[path]['.tag'] == 'file' or entries[path]['.tag'] == 'folder') and path.startswith(prev):
-          if prev and entries[path]['.tag'] == 'file' and path.startswith(prev):
-            entries[prev]['count'] = entries[prev]['count'] + 1
-            del entries[path]
-          elif entries[path]['.tag'] == 'folder':
-            prev = path
-        
-        html = '<html><body>'
-        html += '<h1>Dropbox recent events</h1>\n'
-        html += '<ul>\n'
-        for path in sorted(entries):
-          e = entries[path]
-          html += '<li>[' + e['.tag'] + '] <a href="https://www.dropbox.com/home' + e['path_lower'] + '" target="_blank">' + e['path_display'] + (' (+ ' + str(e['count']) + ' items)' if e['count'] else '') + '</a></li>\n'
-        html += '</ul>\n'
-        html += '<p>Full event feed: <a href="https://www.dropbox.com/events" target="_blank">https://www.dropbox.com/events</a></p>\n'
-        html += '<h3>Raw data</h3>\n'
-        html += '<code>' + str(data) + '</code>\n'
-        html += '<h3>Old cursor</h3><code>' + cursor + '</code><h3>New cursor</h3><code>' + data['cursor'] + '</code>\n'
-        send_mail('Dropbox recent events', html)
+    if data and 'cursor' in data:
+      prev = False
+      for path in sorted(entries):
+        #if prev and (entries[path]['.tag'] == 'file' or entries[path]['.tag'] == 'folder') and path.startswith(prev):
+        if prev and entries[path]['.tag'] == 'file' and path.startswith(prev):
+          entries[prev]['count'] = entries[prev]['count'] + 1
+          del entries[path]
+        elif entries[path]['.tag'] == 'folder':
+          prev = path
+      
+      html = '<html><body>'
+      html += '<h1>Dropbox recent events</h1>\n'
+      html += '<ul>\n'
+      for path in sorted(entries):
+        e = entries[path]
+        html += '<li>[' + e['.tag'] + '] <a href="https://www.dropbox.com/home' + e['path_lower'] + '" target="_blank">' + e['path_display'] + (' (+ ' + str(e['count']) + ' items)' if e['count'] else '') + '</a></li>\n'
+      html += '</ul>\n'
+      html += '<p>Full event feed: <a href="https://www.dropbox.com/events" target="_blank">https://www.dropbox.com/events</a></p>\n'
+      html += '<h3>Raw data (last)</h3>\n'
+      html += '<code>' + str(data) + '</code>\n'
+      html += '<h3>Old cursor</h3><code>' + cursor + '</code><h3>New cursor</h3><code>' + data['cursor'] + '</code>\n'
+      send_mail('Dropbox recent events', html)
         
       cursor_save(data['cursor'])
 
