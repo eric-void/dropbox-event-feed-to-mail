@@ -17,6 +17,9 @@ COMMAND_LIST_FOLDER_CONTINUE = 'curl -s -X POST https://api.dropboxapi.com/2/fil
 #COMMAND_SEND_MAIL = 'echo -ne "Subject: {SUBJECY}\nContent-Type: text/html\n\n{BODY}" | sendmail {EMAIL_TO}'
 COMMAND_SEND_MAIL = 'sendmail {EMAIL_TO}'
 
+# Dropbox has a strange behaviour. Often it gives 0 results, but with the "has_more" property set to TRUE. Retrying the fetch will give correct results. But sometimes we can keep retrying and get nothing. So a "max number of retries" is needed
+LOOP_MAX = 100
+
 #------------------------------------------------------------------------------
 
 import logging
@@ -109,15 +112,17 @@ def main():
   if cursor:
     entries = {}
     cont = True
+    loop = 0
     while cont:
+      loop = loop + 1
       data = updates_fetch(cursor)
       cont = False
       if data and 'entries' in data:
-        print("Got data for " + str(len(data['entries'])) + " entries ...")
+        print("Got data for " + str(len(data['entries'])) + " entries (#" + str(loop) + ") ...")
         for e in data['entries']:
           entries[e['path_lower']] = e
           entries[e['path_lower']]['count'] = 0
-        if data['has_more'] and data['entries']:
+        if data['has_more'] and loop < LOOP_MAX:
           cursor = data['cursor']
           time.sleep(5)
           cont = True
