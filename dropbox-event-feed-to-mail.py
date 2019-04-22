@@ -20,6 +20,9 @@ COMMAND_SEND_MAIL = 'sendmail {EMAIL_TO}'
 # Dropbox has a strange behaviour. Often it gives 0 results, but with the "has_more" property set to TRUE. Retrying the fetch will give correct results. But sometimes we can keep retrying and get nothing. So a "max number of retries" is needed
 LOOP_MAX = 100
 
+# Max records in a single mail (if more records are presents, the script will split them in multiple mails)
+RECORDS_MAX = 20000
+
 #------------------------------------------------------------------------------
 
 import logging
@@ -109,7 +112,9 @@ def updates_fetch(cursor):
 
 def main():
   cursor = cursor_fetch()
-  if cursor:
+  page = 0
+  limited = True
+  while cursor and limited:
     entries = {}
     cont = True
     loop = 0
@@ -122,7 +127,7 @@ def main():
         for e in data['entries']:
           entries[e['path_lower']] = e
           entries[e['path_lower']]['count'] = 0
-        if data['has_more'] and loop < LOOP_MAX:
+        if data['has_more'] and loop < LOOP_MAX and len(entries) < RECORDS_MAX:
           cursor = data['cursor']
           time.sleep(5)
           cont = True
@@ -148,9 +153,15 @@ def main():
       html += '<h3>Raw data (last)</h3>\n'
       html += '<code>' + str(data) + '</code>\n'
       html += '<h3>Old cursor</h3><code>' + cursor + '</code><h3>New cursor</h3><code>' + data['cursor'] + '</code>\n'
-      send_mail('Dropbox recent events', html)
-        
+      send_mail('Dropbox recent events' + ('' if not page else (' (' + str(page) + ')')), html)
+
       cursor_save(data['cursor'])
+
+    if len(entries) >= RECORDS_MAX and data['has_more']:
+      page = page + 1
+      print('Too much records for a single mail, sent a partial mail and continue with next records...')
+    else:
+      limited = False
 
 if __name__ == '__main__':
   main()
