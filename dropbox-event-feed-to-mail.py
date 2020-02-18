@@ -132,6 +132,9 @@ def main():
           time.sleep(5)
           cont = True
 
+    if not data['has_more'] or loop >= LOOP_MAX:
+      limited = False
+
     if data and 'cursor' in data:
       prev = False
       for path in sorted(entries):
@@ -157,11 +160,9 @@ def main():
 
       cursor_save(data['cursor'])
 
-    if len(entries) >= RECORDS_MAX and data['has_more']:
+    if limited:
       page = page + 1
       print('Too much records for a single mail, sent a partial mail and continue with next records...')
-    else:
-      limited = False
 
 if __name__ == '__main__':
   main()
